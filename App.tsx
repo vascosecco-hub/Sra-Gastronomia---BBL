@@ -16,7 +16,9 @@ import {
   Users,
   DollarSign,
   Package,
-  Calendar
+  Calendar,
+  MessageCircle,
+  Loader2
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -34,6 +36,7 @@ import {
 } from 'recharts';
 import { Product, CartItem, OrderForm } from './types';
 import { PRODUCTS, KPIS, SALES_DATA, TOP_PRODUCTS } from './constants';
+import { supabase } from './supabaseClient';
 
 // --- COMPONENTS ---
 
@@ -58,27 +61,57 @@ const Header = ({
       </div>
 
       {/* Desktop Nav */}
-      <nav className="hidden md:flex items-center space-x-8 text-sm font-semibold tracking-widest uppercase text-gray-600">
+      <nav className="hidden lg:flex items-center space-x-8 text-sm font-semibold tracking-widest uppercase text-gray-600">
         <button onClick={() => onNavigate('home')} className="hover:text-black transition">Home</button>
         <button onClick={() => onNavigate('menu')} className="hover:text-black transition">Cardápio</button>
         <button onClick={() => onNavigate('events')} className="hover:text-black transition">Eventos</button>
-        <button onClick={() => onNavigate('dashboard')} className="text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200">Staff</button>
       </nav>
 
       {/* Actions */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center gap-4 md:gap-6">
+        {/* WhatsApp CTA */}
+        <a 
+          href="https://app.gptmaker.ai/widget/3E85F2A3DA4031A6D17E8A7F6D386327/iframe" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="hidden md:flex items-center gap-2 group cursor-pointer"
+        >
+          <div className="bg-green-100 p-2 rounded-full text-green-600 group-hover:bg-green-200 transition">
+             <MessageCircle size={20} />
+          </div>
+          <span className="text-sm font-bold text-gray-700 group-hover:text-black transition">
+            Fale com a gente!
+          </span>
+        </a>
+
+        {/* Cart Button */}
         <button 
-          className="relative p-2 hover:bg-gray-100 rounded-full transition"
+          className="relative flex items-center gap-2 group p-1 pr-2 hover:bg-gray-50 rounded-full transition"
           onClick={onOpenCart}
         >
-          <ShoppingBag className="w-6 h-6 text-brand-black" />
-          {cartCount > 0 && (
-            <span className="absolute top-0 right-0 bg-brand-ocre text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
-              {cartCount}
-            </span>
-          )}
+          <div className="relative p-2 bg-gray-100 rounded-full group-hover:bg-gray-200 transition">
+            <ShoppingBag className="w-5 h-5 md:w-6 md:h-6 text-brand-black" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-brand-ocre text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
+                {cartCount}
+              </span>
+            )}
+          </div>
+          <span className="hidden md:block text-xs font-bold text-gray-500 w-24 leading-tight text-left">
+            Revise e envie seu pedido
+          </span>
         </button>
-        <button className="md:hidden p-2">
+
+        {/* Dashboard Access 'SA' */}
+        <button
+          onClick={() => onNavigate('dashboard')}
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-brand-black text-white font-display font-bold text-xs hover:bg-brand-wood transition shadow-sm border border-gray-800"
+          title="Painel SRA"
+        >
+          SA
+        </button>
+
+        <button className="lg:hidden p-2">
           <Menu className="w-6 h-6" />
         </button>
       </div>
@@ -97,8 +130,8 @@ const Hero = ({ onCtaClick }: { onCtaClick: () => void }) => (
     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
     
     <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-      <h1 className="font-display text-5xl md:text-7xl text-white font-bold tracking-widest mb-6">
-        COZINHA <br/> <span className="text-brand-ocre">INDUSTRIAL</span>
+      <h1 className="font-display text-4xl md:text-6xl text-white font-bold tracking-widest mb-6 uppercase">
+        Restaurante e Lanchonete <br/> <span className="text-brand-ocre">Aqui e na sua casa</span>
       </h1>
       <p className="text-gray-300 max-w-lg mb-10 text-lg md:text-xl font-light">
         Gastronomia descomplicada em um ótimo ambiente. 
@@ -280,11 +313,13 @@ const CartDrawer = ({
 const CheckoutModal = ({ 
   cart, 
   onClose, 
-  onConfirm 
+  onConfirm,
+  isLoading
 }: { 
   cart: CartItem[]; 
   onClose: () => void; 
   onConfirm: (data: OrderForm) => void;
+  isLoading: boolean;
 }) => {
   const [formData, setFormData] = useState<OrderForm>({
     name: '',
@@ -304,7 +339,7 @@ const CheckoutModal = ({
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="bg-white w-full max-w-lg relative p-8 rounded shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full">
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full" disabled={isLoading}>
           <X className="w-5 h-5" />
         </button>
         
@@ -315,8 +350,9 @@ const CheckoutModal = ({
             <label className="block text-sm font-bold text-gray-700 mb-1">Seu Nome</label>
             <input 
               required
+              disabled={isLoading}
               type="text" 
-              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black"
+              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black"
               placeholder="Ex: João Silva"
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
@@ -327,8 +363,9 @@ const CheckoutModal = ({
             <label className="block text-sm font-bold text-gray-700 mb-1">WhatsApp (com DDD)</label>
             <input 
               required
+              disabled={isLoading}
               type="tel" 
-              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black"
+              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black"
               placeholder="Ex: 11999998888"
               value={formData.phone}
               onChange={e => setFormData({...formData, phone: e.target.value})}
@@ -339,7 +376,8 @@ const CheckoutModal = ({
             <label className="block text-sm font-bold text-gray-700 mb-1">Endereço de Entrega</label>
             <textarea 
               required
-              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black h-24 resize-none"
+              disabled={isLoading}
+              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black h-24 resize-none"
               placeholder="Rua, Número, Complemento, Bairro"
               value={formData.address}
               onChange={e => setFormData({...formData, address: e.target.value})}
@@ -358,6 +396,7 @@ const CheckoutModal = ({
                 <button
                   key={method.id}
                   type="button"
+                  disabled={isLoading}
                   onClick={() => setFormData({...formData, paymentMethod: method.id as any})}
                   className={`p-3 text-sm font-semibold border rounded transition ${
                     formData.paymentMethod === method.id 
@@ -378,9 +417,18 @@ const CheckoutModal = ({
             </div>
             <button 
               type="submit"
-              className="bg-green-600 text-white px-8 py-3 rounded font-bold uppercase tracking-wider hover:bg-green-700 transition flex items-center gap-2 shadow-lg"
+              disabled={isLoading}
+              className="bg-green-600 text-white px-8 py-3 rounded font-bold uppercase tracking-wider hover:bg-green-700 transition flex items-center gap-2 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Enviar Pedido <Instagram size={18} />
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" /> Processando...
+                </>
+              ) : (
+                <>
+                  Enviar Pedido <Instagram size={18} />
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -402,7 +450,7 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-gray-900 border-r border-gray-800 p-6 flex flex-col z-20">
         <div className="font-display font-bold text-2xl tracking-widest text-white mb-10">
-          SRA<span className="text-brand-ocre">.</span>DASH
+          SRA<span className="text-brand-ocre">.</span>GASTRONOMIA
         </div>
         
         <nav className="space-y-2 flex-grow">
@@ -566,6 +614,7 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Cart Logic
   const addToCart = (product: Product) => {
@@ -586,32 +635,80 @@ export default function App() {
     }).filter(item => item.quantity > 0));
   };
 
-  const handleCheckoutConfirm = (data: OrderForm) => {
-    // Generate WhatsApp Message
-    const itemsList = cart.map(i => `• ${i.quantity}x ${i.name}`).join('\n');
+  const handleCheckoutConfirm = async (data: OrderForm) => {
+    setIsLoading(true);
     const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     
-    const message = `*NOVO PEDIDO - SRA GASTRONOMIA* 🍽️\n\n` +
-      `*Cliente:* ${data.name}\n` +
-      `*Endereço:* ${data.address}\n` +
-      `*Pagamento:* ${data.paymentMethod.toUpperCase()}\n\n` +
-      `*Pedido:*\n${itemsList}\n\n` +
-      `*Total: R$ ${total.toFixed(2)}*`;
+    // 1. Prepare Supabase Data
+    const orderPayload = {
+      whatsapp: data.phone,
+      nome: data.name,
+      endereco: data.address,
+      forma_pagamento: data.paymentMethod,
+      valor_total: total,
+      canal: 'site',
+      created_at: new Date().toISOString()
+    };
 
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${data.phone.replace(/\D/g, '')}?text=${encodedMessage}`;
+    try {
+      // 2. Insert into 'orders'
+      const { data: orderResult, error: orderError } = await supabase
+        .from('orders')
+        .insert([orderPayload])
+        .select()
+        .single();
 
-    // In a real app, here we would send data to Supabase/Make.com before redirecting
-    console.log("Sending to Make.com webhook...", { data, cart, total });
+      if (orderError) throw orderError;
 
-    // Open WhatsApp
-    window.open(whatsappUrl, '_blank');
-    
-    // Reset
-    setCart([]);
-    setIsCheckoutOpen(false);
-    setIsCartOpen(false);
-    alert("Pedido encaminhado para o WhatsApp! Aguarde nossa confirmação.");
+      if (orderResult) {
+        // 3. Prepare items
+        const orderItems = cart.map(item => ({
+          order_id: orderResult.id,
+          produto: item.name,
+          preco: item.price,
+          quantidade: item.quantity,
+          subtotal: item.price * item.quantity
+        }));
+
+        // 4. Insert into 'order_items'
+        const { error: itemsError } = await supabase
+          .from('order_items')
+          .insert(orderItems);
+        
+        if (itemsError) throw itemsError;
+
+        console.log("Order saved to Supabase:", orderResult.id);
+      }
+
+      // 5. Redirect to GPT Maker (only if successful DB save)
+      // Generate Message
+      const itemsList = cart.map(i => `• ${i.quantity}x ${i.name}`).join('\n');
+      const message = `*NOVO PEDIDO - SRA GASTRONOMIA* 🍽️\n\n` +
+        `*Cliente:* ${data.name}\n` +
+        `*WhatsApp:* ${data.phone}\n` +
+        `*Endereço:* ${data.address}\n` +
+        `*Pagamento:* ${data.paymentMethod.toUpperCase()}\n\n` +
+        `*Pedido:*\n${itemsList}\n\n` +
+        `*Total: R$ ${total.toFixed(2)}*`;
+
+      const encodedMessage = encodeURIComponent(message);
+      const gptMakerUrl = `https://app.gptmaker.ai/widget/3E85F2A3DA4031A6D17E8A7F6D386327/iframe?message=${encodedMessage}`;
+
+      // Open GPT Maker
+      window.open(gptMakerUrl, '_blank');
+      
+      // Reset
+      setCart([]);
+      setIsCheckoutOpen(false);
+      setIsCartOpen(false);
+      alert("Pedido realizado e salvo com sucesso! Redirecionando para atendimento...");
+
+    } catch (error) {
+      console.error("Error processing order:", error);
+      alert("Houve um erro ao processar seu pedido no sistema. Por favor, tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (currentView === 'dashboard') {
@@ -682,6 +779,7 @@ export default function App() {
           cart={cart}
           onClose={() => setIsCheckoutOpen(false)}
           onConfirm={handleCheckoutConfirm}
+          isLoading={isLoading}
         />
       )}
     </div>
