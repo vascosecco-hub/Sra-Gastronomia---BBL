@@ -6,7 +6,6 @@ import {
   ChevronRight, 
   MapPin, 
   Phone, 
-  Instagram, 
   Minus, 
   Plus, 
   Trash2, 
@@ -14,11 +13,14 @@ import {
   LayoutDashboard,
   TrendingUp,
   Users,
-  DollarSign,
   Package,
   Calendar,
   MessageCircle,
-  Loader2
+  Loader2,
+  Lock,
+  LogOut,
+  User,
+  Instagram
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -28,8 +30,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell
@@ -37,6 +37,7 @@ import {
 import { Product, CartItem, OrderForm } from './types';
 import { PRODUCTS, KPIS, SALES_DATA, TOP_PRODUCTS } from './constants';
 import { supabase } from './supabaseClient';
+import { Session } from '@supabase/supabase-js';
 
 // --- COMPONENTS ---
 
@@ -44,11 +45,13 @@ import { supabase } from './supabaseClient';
 const Header = ({ 
   cartCount, 
   onOpenCart, 
-  onNavigate 
+  onNavigate,
+  session
 }: { 
   cartCount: number; 
   onOpenCart: () => void; 
   onNavigate: (view: string) => void;
+  session: Session | null;
 }) => (
   <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
     <div className="container mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
@@ -105,10 +108,14 @@ const Header = ({
         {/* Dashboard Access 'SA' */}
         <button
           onClick={() => onNavigate('dashboard')}
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-brand-black text-white font-display font-bold text-xs hover:bg-brand-wood transition shadow-sm border border-gray-800"
-          title="Painel SRA"
+          className={`w-9 h-9 flex items-center justify-center rounded-full font-display font-bold text-xs transition shadow-sm border border-gray-800 ${
+            session 
+            ? 'bg-green-600 text-white hover:bg-green-700' 
+            : 'bg-brand-black text-white hover:bg-brand-wood'
+          }`}
+          title={session ? "Acessar Painel" : "Login Administrativo"}
         >
-          SA
+          {session ? <User size={16} /> : 'SA'}
         </button>
 
         <button className="lg:hidden p-2">
@@ -437,8 +444,90 @@ const CheckoutModal = ({
   );
 };
 
-// 6. DASHBOARD (Internal)
-const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
+// 6. LOGIN MODAL
+const LoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      setLoading(false);
+      onSuccess();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
+      <div className="bg-white w-full max-w-sm relative p-8 rounded-lg shadow-2xl animate-fade-in">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-black">
+          <X size={20} />
+        </button>
+        
+        <div className="text-center mb-6">
+          <div className="inline-block p-3 rounded-full bg-brand-black text-white mb-3">
+            <Lock size={24} />
+          </div>
+          <h2 className="font-display text-2xl font-bold uppercase">Área Restrita</h2>
+          <p className="text-sm text-gray-500">Acesso exclusivo para administradores</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded text-sm mb-4 text-center border border-red-100">
+            {error === "Invalid login credentials" ? "E-mail ou senha incorretos." : error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">E-mail</label>
+            <input 
+              type="email" 
+              required
+              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black focus:ring-1 focus:ring-brand-black"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Senha</label>
+            <input 
+              type="password" 
+              required
+              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black focus:ring-1 focus:ring-brand-black"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-brand-black text-white py-3 font-bold uppercase hover:bg-brand-wood transition disabled:opacity-70 flex justify-center"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : 'Entrar no Sistema'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// 7. DASHBOARD (Internal)
+const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Session }) => {
   const COLORS = ['#8B5A2B', '#C9A227', '#4A6741', '#1A1A1A'];
   
   // Custom Heatmap Grid simulation
@@ -451,6 +540,11 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-gray-900 border-r border-gray-800 p-6 flex flex-col z-20">
         <div className="font-display font-bold text-2xl tracking-widest text-white mb-10">
           SRA<span className="text-brand-ocre">.</span>GASTRONOMIA
+        </div>
+        
+        <div className="mb-6 px-4 py-3 bg-gray-800 rounded border border-gray-700">
+           <p className="text-xs text-gray-400 uppercase font-bold mb-1">Usuário Logado</p>
+           <p className="text-sm text-white truncate" title={session.user.email}>{session.user.email}</p>
         </div>
         
         <nav className="space-y-2 flex-grow">
@@ -470,9 +564,9 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
 
         <button 
           onClick={onLogout}
-          className="mt-auto flex items-center gap-2 text-gray-500 hover:text-white transition text-sm"
+          className="mt-auto flex items-center gap-2 text-red-400 hover:text-red-300 transition text-sm px-4 py-2 hover:bg-red-900/20 rounded"
         >
-          <ArrowRight size={16} /> Sair do Sistema
+          <LogOut size={16} /> Sair do Sistema
         </button>
       </aside>
 
@@ -608,13 +702,55 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   );
 };
 
-// 7. MAIN APP ORCHESTRATOR
+// 8. MAIN APP ORCHESTRATOR
 export default function App() {
   const [currentView, setCurrentView] = useState('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Auth State
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  useEffect(() => {
+    // 1. Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    // 2. Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      
+      // If user logs out while on dashboard, kick them out
+      if (!session && currentView === 'dashboard') {
+        setCurrentView('home');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [currentView]);
+
+  const handleNavigate = (view: string) => {
+    if (view === 'dashboard') {
+      if (session) {
+        setCurrentView('dashboard');
+      } else {
+        setIsLoginOpen(true);
+      }
+    } else {
+      setCurrentView(view);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentView('home');
+  };
 
   // Cart Logic
   const addToCart = (product: Product) => {
@@ -711,8 +847,8 @@ export default function App() {
     }
   };
 
-  if (currentView === 'dashboard') {
-    return <Dashboard onLogout={() => setCurrentView('home')} />;
+  if (currentView === 'dashboard' && session) {
+    return <Dashboard onLogout={handleLogout} session={session} />;
   }
 
   return (
@@ -720,7 +856,8 @@ export default function App() {
       <Header 
         cartCount={cart.reduce((a, b) => a + b.quantity, 0)} 
         onOpenCart={() => setIsCartOpen(true)}
-        onNavigate={setCurrentView}
+        onNavigate={handleNavigate}
+        session={session}
       />
 
       <main className="flex-grow">
@@ -780,6 +917,16 @@ export default function App() {
           onClose={() => setIsCheckoutOpen(false)}
           onConfirm={handleCheckoutConfirm}
           isLoading={isLoading}
+        />
+      )}
+
+      {isLoginOpen && (
+        <LoginModal 
+          onClose={() => setIsLoginOpen(false)}
+          onSuccess={() => {
+            setIsLoginOpen(false);
+            setCurrentView('dashboard');
+          }}
         />
       )}
     </div>
