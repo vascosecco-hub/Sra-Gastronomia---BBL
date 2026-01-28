@@ -528,6 +528,7 @@ const LoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: ()
 
 // 7. DASHBOARD (Internal)
 const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Session }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const COLORS = ['#8B5A2B', '#C9A227', '#4A6741', '#1A1A1A'];
   
   // Custom Heatmap Grid simulation
@@ -535,11 +536,29 @@ const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Sessi
   const hours = Array.from({length: 12}, (_, i) => i + 11); // 11h to 22h
 
   return (
-    <div className="min-h-screen bg-brand-dark text-gray-100 font-sans">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-gray-900 border-r border-gray-800 p-6 flex flex-col z-20">
-        <div className="font-display font-bold text-2xl tracking-widest text-white mb-10">
-          SRA<span className="text-brand-ocre">.</span>GASTRONOMIA
+    <div className="min-h-screen bg-brand-dark text-gray-100 font-sans flex relative">
+      
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Responsive Logic */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 border-r border-gray-800 p-6 flex flex-col transition-transform duration-300 ease-in-out
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0
+      `}>
+        <div className="flex justify-between items-center mb-10">
+          <div className="font-display font-bold text-2xl tracking-widest text-white">
+            SRA<span className="text-brand-ocre">.</span>
+          </div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white">
+            <X size={24} />
+          </button>
         </div>
         
         <div className="mb-6 px-4 py-3 bg-gray-800 rounded border border-gray-700">
@@ -571,14 +590,22 @@ const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Sessi
       </aside>
 
       {/* Main Content */}
-      <main className="ml-64 p-8">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Dashboard Comercial</h1>
-            <p className="text-gray-400 text-sm">Atualizado em: {new Date().toLocaleDateString()}</p>
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden ml-0 md:ml-64 p-4 md:p-8">
+        <header className="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 text-gray-400 hover:text-white bg-gray-800 rounded"
+            >
+              <Menu size={24} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Dashboard Comercial</h1>
+              <p className="text-gray-400 text-sm">Atualizado em: {new Date().toLocaleDateString()}</p>
+            </div>
           </div>
           <div className="flex gap-4">
-             <div className="bg-gray-800 px-4 py-2 rounded text-sm flex items-center gap-2">
+             <div className="bg-gray-800 px-4 py-2 rounded text-sm flex items-center gap-2 w-full md:w-auto justify-center">
                 <Calendar size={16} /> Últimos 30 dias
              </div>
           </div>
@@ -662,7 +689,7 @@ const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Sessi
           <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
             <MapPin size={18} className="text-brand-ocre" /> Mapa de Calor (Horário de Pico)
           </h3>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto custom-scrollbar">
             <div className="min-w-[600px]">
               <div className="flex mb-2">
                 <div className="w-12"></div>
