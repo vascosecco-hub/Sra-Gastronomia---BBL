@@ -34,11 +34,12 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { Product, CartItem, OrderForm } from './types';
+import { Product, CartItem, OrderForm, DetailedSale, HeatmapPoint } from './types';
 import { PRODUCTS, KPIS, SALES_DATA, TOP_PRODUCTS } from './constants';
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { aiService } from './aiService';
+import { generateMockSales, generateHeatmapData } from './crmMockService';
 
 // --- COMPONENTS ---
 
@@ -87,6 +88,17 @@ const Header = ({
             Fale com a gente!
           </span>
         </a>
+
+        {/* CRM-SG Access */}
+        <button
+          onClick={() => onNavigate('dashboard')}
+          className="hidden md:flex items-center gap-2 group cursor-pointer bg-red-100 p-2 rounded-full text-red-600 hover:bg-red-200 transition"
+        >
+          <LayoutDashboard size={20} />
+          <span className="text-sm font-bold text-gray-700 group-hover:text-black transition">
+            CRM-SG
+          </span>
+        </button>
 
         {/* Cart Button */}
         <button
@@ -524,202 +536,251 @@ const LoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: ()
   );
 };
 
-// 7. DASHBOARD (Internal)
+// 7. DASHBOARD (Integrated CRM)
 const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Session }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const COLORS = ['#8B5A2B', '#C9A227', '#4A6741', '#1A1A1A'];
+  const [sales, setSales] = useState<DetailedSale[]>([]);
+  const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([]);
 
-  // Custom Heatmap Grid simulation
-  const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const hours = Array.from({ length: 12 }, (_, i) => i + 11); // 11h to 22h
+  // Filters
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filters, setFilters] = useState({
+    customer: '',
+    category: '',
+    product: '',
+    minPrice: '',
+    address: ''
+  });
+
+  useEffect(() => {
+    // Load initial data
+    setSales(generateMockSales(150));
+    setHeatmapData(generateHeatmapData());
+  }, []);
+
+  // Filter Logic
+  const filteredSales = sales.filter(sale => {
+    const saleDate = sale.date.split('T')[0];
+    const matchesDate = saleDate >= startDate && saleDate <= endDate;
+    const matchesCustomer = sale.customerName.toLowerCase().includes(filters.customer.toLowerCase());
+    const matchesCategory = sale.category.toLowerCase().includes(filters.category.toLowerCase());
+    const matchesProduct = sale.product.toLowerCase().includes(filters.product.toLowerCase());
+    const matchesAddress = sale.address.toLowerCase().includes(filters.address.toLowerCase());
+    const matchesPrice = filters.minPrice ? sale.price >= Number(filters.minPrice) : true;
+
+    return matchesDate && matchesCustomer && matchesCategory && matchesProduct && matchesAddress && matchesPrice;
+  });
+
+  // Aggregations
+  const totalRevenue = filteredSales.reduce((acc, curr) => acc + curr.price, 0);
+  const totalOrders = filteredSales.length;
+  const uniqueCustomers = new Set(filteredSales.map(s => s.customerName)).size;
+  const avgTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  const kpis = [
+    { label: 'Faturamento', value: `R$ ${totalRevenue.toFixed(2)}`, color: 'text-green-500' },
+    { label: 'Pedidos', value: totalOrders, color: 'text-blue-500' },
+    { label: 'Clientes Únicos', value: uniqueCustomers, color: 'text-purple-500' },
+    { label: 'Ticket Médio', value: `R$ ${avgTicket.toFixed(2)}`, color: 'text-brand-ocre' },
+  ];
+
+  // Chart Data Preparation
+  const groupBy = (key: keyof DetailedSale) => {
+    const counts: Record<string, number> = {};
+    filteredSales.forEach(sale => {
+      const val = String(sale[key]);
+      counts[val] = (counts[val] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  };
+
+  const categoryData = groupBy('category');
+  const productData = groupBy('product').sort((a, b) => b.value - a.value).slice(0, 5);
+
+  const COLORS = ['#8B5A2B', '#C9A227', '#4A6741', '#D97706', '#B45309'];
 
   return (
-    <div className="min-h-screen bg-brand-dark text-gray-100 font-sans flex relative">
-
+    <div className="min-h-screen bg-gray-100 text-gray-900 font-sans flex relative">
       {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* Sidebar - Responsive Logic */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 border-r border-gray-800 p-6 flex flex-col transition-transform duration-300 ease-in-out
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0
-      `}>
-        <div className="flex justify-between items-center mb-10">
-          <div className="font-display font-bold text-2xl tracking-widest text-white">
-            SRA<span className="text-brand-ocre">.</span>
-          </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white">
-            <X size={24} />
-          </button>
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 text-white p-6 flex flex-col transition-transform duration-300 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        <div className="font-display font-bold text-2xl tracking-widest mb-10">
+          CRM<span className="text-brand-ocre">-SG</span>
         </div>
-
-        <div className="mb-6 px-4 py-3 bg-gray-800 rounded border border-gray-700">
-          <p className="text-xs text-gray-400 uppercase font-bold mb-1">Usuário Logado</p>
-          <p className="text-sm text-white truncate" title={session.user.email}>{session.user.email}</p>
-        </div>
-
         <nav className="space-y-2 flex-grow">
-          <button className="w-full flex items-center gap-3 px-4 py-3 bg-brand-ocre/10 text-brand-ocre rounded font-medium">
-            <LayoutDashboard size={20} /> Visão Geral
+          <button className="w-full flex items-center gap-3 px-4 py-3 bg-brand-ocre/20 text-brand-ocre rounded font-bold border-l-4 border-brand-ocre">
+            <LayoutDashboard size={20} /> Painel Geral
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:bg-gray-800 hover:text-white rounded transition">
-            <Package size={20} /> Produtos
-          </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:bg-gray-800 hover:text-white rounded transition">
-            <Users size={20} /> Clientes
-          </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:bg-gray-800 hover:text-white rounded transition">
+          <div className="px-4 py-2 text-xs font-bold text-gray-500 uppercase mt-4">Analítico</div>
+          <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white transition">
             <TrendingUp size={20} /> Vendas
           </button>
+          <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white transition">
+            <MapPin size={20} /> Mapa de Calor
+          </button>
         </nav>
-
-        <button
-          onClick={onLogout}
-          className="mt-auto flex items-center gap-2 text-red-400 hover:text-red-300 transition text-sm px-4 py-2 hover:bg-red-900/20 rounded"
-        >
-          <LogOut size={16} /> Sair do Sistema
+        <button onClick={onLogout} className="mt-auto flex items-center gap-2 text-red-400 hover:text-white transition">
+          <LogOut size={16} /> Sair
         </button>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden ml-0 md:ml-64 p-4 md:p-8">
-        <header className="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+      <main className="flex-1 flex flex-col min-w-0 md:ml-64 p-4 md:p-8 bg-gray-50 overflow-y-auto h-screen">
+        <header className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="md:hidden p-2 text-gray-400 hover:text-white bg-gray-800 rounded"
-            >
+            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 text-gray-600">
               <Menu size={24} />
             </button>
-            <div>
-              <h1 className="text-2xl font-bold text-white">Dashboard Comercial</h1>
-              <p className="text-gray-400 text-sm">Atualizado em: {new Date().toLocaleDateString()}</p>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-800">Performance de Vendas</h1>
           </div>
-          <div className="flex gap-4">
-            <div className="bg-gray-800 px-4 py-2 rounded text-sm flex items-center gap-2 w-full md:w-auto justify-center">
-              <Calendar size={16} /> Últimos 30 dias
-            </div>
+          <div className="flex items-center gap-2 text-sm text-gray-500 bg-white px-3 py-1 rounded shadow-sm border">
+            <Calendar size={14} /> {new Date().toLocaleDateString()}
           </div>
         </header>
 
+        {/* Global Date Filter */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6 flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Início</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border rounded p-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Fim</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded p-2 text-sm" />
+          </div>
+        </div>
+
         {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {KPIS.map((kpi, idx) => (
-            <div key={idx} className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-              <p className="text-gray-400 text-sm font-medium mb-1">{kpi.label}</p>
-              <div className="flex items-end justify-between">
-                <h3 className="text-2xl font-bold text-white">{kpi.value}</h3>
-                <span className={`text-sm font-bold flex items-center ${kpi.trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
-                  {kpi.trend === 'up' ? '+' : ''}{kpi.change}%
-                </span>
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {kpis.map((kpi, i) => (
+            <div key={i} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+              <p className="text-xs text-gray-500 font-bold uppercase">{kpi.label}</p>
+              <h3 className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</h3>
             </div>
           ))}
         </div>
 
-        {/* Charts Section 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          {/* Main Sales Chart */}
-          <div className="lg:col-span-2 bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h3 className="text-lg font-bold mb-6">Vendas vs Período</h3>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={SALES_DATA}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                  <XAxis dataKey="name" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff' }}
-                  />
-                  <Bar dataKey="value" fill="#C9A227" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 h-80">
+            <h3 className="font-bold mb-4 text-gray-800">Vendas por Categoria</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {categoryData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 h-80">
+            <h3 className="font-bold mb-4 text-gray-800">Top 5 Produtos</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={productData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" />
+                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#8B5A2B" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-          {/* Top Products Pie */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h3 className="text-lg font-bold mb-4">Top Produtos</h3>
-            <div className="h-64 w-full relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={TOP_PRODUCTS}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="sales"
-                  >
-                    {TOP_PRODUCTS.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff' }} />
-                </PieChart>
-              </ResponsiveContainer>
-              {/* Legend */}
-              <div className="mt-4 space-y-2">
-                {TOP_PRODUCTS.map((p, i) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                      <span className="text-gray-300">{p.name}</span>
-                    </div>
-                    <span className="font-bold text-white">{p.sales}</span>
-                  </div>
+        {/* Heatmap */}
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-8">
+          <h3 className="font-bold mb-4 text-gray-800 flex items-center gap-2">
+            <MapPin size={18} className="text-red-500" /> Mapa de Calor de Vendas (Mês Atual)
+          </h3>
+          <div className="overflow-x-auto">
+            <div className="min-w-[800px]">
+              <div className="flex mb-1">
+                <div className="w-8"></div>
+                {Array.from({ length: 24 }).map((_, h) => (
+                  <div key={h} className="flex-1 text-[10px] text-gray-400 text-center">{h}h</div>
                 ))}
               </div>
+              {Array.from({ length: 30 }).map((_, d) => {
+                const day = d + 1;
+                return (
+                  <div key={day} className="flex mb-1 h-6">
+                    <div className="w-8 text-xs text-gray-500 font-mono flex items-center justify-center">{day}</div>
+                    {Array.from({ length: 24 }).map((_, h) => {
+                      const point = heatmapData.find(p => p.dayIndex === day && p.hour === h);
+                      const intensity = point ? point.intensity : 0;
+                      // Red (Hot/High) -> Yellow (Cold/Low)
+                      // High Intensity (1) -> R=255, G=0
+                      // Low Intensity (0) -> R=255, G=255
+                      const g = Math.floor(255 * (1 - intensity));
+                      const color = `rgb(255, ${g}, 0)`;
+                      const opacity = intensity * 0.8 + 0.2; // Ensure visible
+
+                      return (
+                        <div
+                          key={h}
+                          className="flex-1 mx-[1px] rounded-sm transition hover:scale-110"
+                          style={{ backgroundColor: color, opacity }}
+                          title={`Dia ${day} às ${h}h: Intensidade ${(intensity * 100).toFixed(0)}%`}
+                        />
+                      );
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-2 text-xs text-gray-500">
+              <span className="w-3 h-3 bg-[rgb(255,255,0)] inline-block rounded-sm"></span> Menor Movimento
+              <span className="w-3 h-3 bg-[rgb(255,0,0)] inline-block rounded-sm ml-2"></span> Maior Movimento
             </div>
           </div>
         </div>
 
-        {/* Heatmap Section */}
-        <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-          <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-            <MapPin size={18} className="text-brand-ocre" /> Mapa de Calor (Horário de Pico)
-          </h3>
-          <div className="overflow-x-auto custom-scrollbar">
-            <div className="min-w-[600px]">
-              <div className="flex mb-2">
-                <div className="w-12"></div>
-                {hours.map(h => (
-                  <div key={h} className="flex-1 text-center text-xs text-gray-500 font-mono">
-                    {h}h
-                  </div>
-                ))}
-              </div>
-              {days.map((day, dIdx) => (
-                <div key={day} className="flex items-center mb-2">
-                  <div className="w-12 text-xs font-bold text-gray-400">{day}</div>
-                  {hours.map((_, hIdx) => {
-                    // Simulate random intensity
-                    const intensity = Math.random();
-                    let bgClass = 'bg-gray-700'; // low
-                    if (intensity > 0.6) bgClass = 'bg-yellow-900/40';
-                    if (intensity > 0.8) bgClass = 'bg-brand-ocre/60';
-                    if (intensity > 0.9) bgClass = 'bg-brand-ocre';
-
-                    return (
-                      <div key={hIdx} className="flex-1 px-1">
-                        <div
-                          className={`h-8 w-full rounded-sm ${bgClass} hover:ring-1 ring-white transition cursor-pointer`}
-                          title={`${day} às ${hours[hIdx]}h`}
-                        ></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+        {/* Detailed Data Table */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-4 justify-between items-end">
+            <h3 className="font-bold text-gray-800">Detalhamento de Vendas</h3>
+            <div className="flex gap-2">
+              <input placeholder="Cliente..." className="p-2 text-sm border rounded w-32" value={filters.customer} onChange={e => setFilters({ ...filters, customer: e.target.value })} />
+              <input placeholder="Categoria..." className="p-2 text-sm border rounded w-32" value={filters.category} onChange={e => setFilters({ ...filters, category: e.target.value })} />
             </div>
+          </div>
+          <div className="overflow-x-auto max-h-96">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-100 text-gray-600 font-bold sticky top-0">
+                <tr>
+                  <th className="p-3">Data/Hora</th>
+                  <th className="p-3">Cliente</th>
+                  <th className="p-3">WhatsApp</th>
+                  <th className="p-3">Categoria</th>
+                  <th className="p-3">Produto</th>
+                  <th className="p-3">Valor</th>
+                  <th className="p-3">Endereço</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredSales.map(sale => (
+                  <tr key={sale.id} className="hover:bg-gray-50 transition">
+                    <td className="p-3 text-gray-500">{new Date(sale.date).toLocaleString()}</td>
+                    <td className="p-3 font-medium">{sale.customerName}</td>
+                    <td className="p-3 text-gray-500">{sale.whatsapp}</td>
+                    <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs uppercase font-bold">{sale.category}</span></td>
+                    <td className="p-3">{sale.product}</td>
+                    <td className="p-3 text-green-600 font-bold">R$ {sale.price.toFixed(2)}</td>
+                    <td className="p-3 text-gray-500 max-w-xs truncate" title={sale.address}>{sale.address}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-3 bg-gray-50 text-xs text-gray-500 text-center border-t">
+            Exibindo {filteredSales.length} registros
           </div>
         </div>
       </main>
