@@ -29,20 +29,3 @@ export interface SalesData {
   name: string;
   value: number;
 }
-
-export interface DetailedSale {
-  id: string;
-  date: string; // ISO string
-  customerName: string;
-  whatsapp: string;
-  category: string;
-  product: string;
-  price: number;
-  address: string;
-}
-
-export interface HeatmapPoint {
-  dayIndex: number; // 0-6 (Sun-Sat) or 1-30 (Day of month) - Requirement says "days of month"
-  hour: number; // 0-23
-  intensity: number; // 0-1
-}
