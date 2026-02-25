@@ -37,7 +37,7 @@ import {
 import { Product, CartItem, OrderForm } from './types';
 import { PRODUCTS, KPIS, SALES_DATA, TOP_PRODUCTS } from './constants';
 import { supabase } from './supabaseClient';
-import { Session } from '@supabase/supabase-js';
+// import { Session } from '@supabase/supabase-js'; // No longer needed for simplified login
 
 // --- COMPONENTS ---
 
@@ -46,12 +46,12 @@ const Header = ({
   cartCount, 
   onOpenCart, 
   onNavigate,
-  session
+  isLoggedIn
 }: { 
   cartCount: number; 
   onOpenCart: () => void; 
   onNavigate: (view: string) => void;
-  session: Session | null;
+  isLoggedIn: boolean;
 }) => (
   <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
     <div className="container mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
@@ -109,13 +109,13 @@ const Header = ({
         <button
           onClick={() => onNavigate('dashboard')}
           className={`w-9 h-9 flex items-center justify-center rounded-full font-display font-bold text-xs transition shadow-sm border border-gray-800 ${
-            session 
+            isLoggedIn 
             ? 'bg-green-600 text-white hover:bg-green-700' 
             : 'bg-brand-black text-white hover:bg-brand-wood'
           }`}
-          title={session ? "Acessar Painel" : "Login Administrativo"}
+          title={isLoggedIn ? "Acessar Painel" : "Login Administrativo"}
         >
-          {session ? <User size={16} /> : 'SA'}
+          {isLoggedIn ? <User size={16} /> : 'SA'}
         </button>
 
         <button className="lg:hidden p-2">
@@ -446,28 +446,16 @@ const CheckoutModal = ({
 
 // 6. LOGIN MODAL
 const LoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
+    // Simulate a successful login without actual authentication
+    setTimeout(() => {
       setLoading(false);
       onSuccess();
-    }
+    }, 500);
   };
 
   return (
@@ -486,33 +474,7 @@ const LoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: ()
           <p className="text-sm text-gray-500">Acesso exclusivo para administradores</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded text-sm mb-4 text-center border border-red-100">
-            {error === "Invalid login credentials" ? "E-mail ou senha incorretos." : error}
-          </div>
-        )}
-
         <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">E-mail</label>
-            <input 
-              type="email" 
-              required
-              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black focus:ring-1 focus:ring-brand-black"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Senha</label>
-            <input 
-              type="password" 
-              required
-              className="w-full bg-white text-black border border-gray-300 p-3 rounded focus:outline-none focus:border-brand-black focus:ring-1 focus:ring-brand-black"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
           <button 
             type="submit" 
             disabled={loading}
@@ -527,7 +489,7 @@ const LoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: ()
 };
 
 // 7. DASHBOARD (Internal)
-const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Session }) => {
+const Dashboard = ({ isLoggedIn }: { isLoggedIn: boolean }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const COLORS = ['#8B5A2B', '#C9A227', '#4A6741', '#1A1A1A'];
   
@@ -563,7 +525,7 @@ const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Sessi
         
         <div className="mb-6 px-4 py-3 bg-gray-800 rounded border border-gray-700">
            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Usuário Logado</p>
-           <p className="text-sm text-white truncate" title={session.user.email}>{session.user.email}</p>
+           <p className="text-sm text-white truncate">Administrador</p>
         </div>
         
         <nav className="space-y-2 flex-grow">
@@ -581,12 +543,7 @@ const Dashboard = ({ onLogout, session }: { onLogout: () => void, session: Sessi
           </button>
         </nav>
 
-        <button 
-          onClick={onLogout}
-          className="mt-auto flex items-center gap-2 text-red-400 hover:text-red-300 transition text-sm px-4 py-2 hover:bg-red-900/20 rounded"
-        >
-          <LogOut size={16} /> Sair do Sistema
-        </button>
+
       </aside>
 
       {/* Main Content */}
@@ -738,33 +695,17 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   
   // Auth State
-  const [session, setSession] = useState<Session | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   useEffect(() => {
-    // 1. Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    // 2. Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      
-      // If user logs out while on dashboard, kick them out
-      if (!session && currentView === 'dashboard') {
-        setCurrentView('home');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [currentView]);
+    // No longer using Supabase session for dashboard access
+    // The isLoggedIn state is managed by the LoginModal's onSuccess callback
+  }, []);
 
   const handleNavigate = (view: string) => {
     if (view === 'dashboard') {
-      if (session) {
+      if (isLoggedIn) {
         setCurrentView('dashboard');
       } else {
         setIsLoginOpen(true);
@@ -774,10 +715,7 @@ export default function App() {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setCurrentView('home');
-  };
+
 
   // Cart Logic
   const addToCart = (product: Product) => {
@@ -874,8 +812,8 @@ export default function App() {
     }
   };
 
-  if (currentView === 'dashboard' && session) {
-    return <Dashboard onLogout={handleLogout} session={session} />;
+  if (currentView === 'dashboard') {
+    return <Dashboard isLoggedIn={isLoggedIn} />;
   }
 
   return (
@@ -884,7 +822,7 @@ export default function App() {
         cartCount={cart.reduce((a, b) => a + b.quantity, 0)} 
         onOpenCart={() => setIsCartOpen(true)}
         onNavigate={handleNavigate}
-        session={session}
+
       />
 
       <main className="flex-grow">
